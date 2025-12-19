@@ -1,16 +1,63 @@
 <!DOCTYPE html>
-<html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitoraggio IoT Cosmos DB</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+        .card { border: 1px solid #ddd; padding: 15px; border-radius: 8px; max-width: 400px; }
+        select, button { padding: 10px; margin: 10px 0; width: 100%; }
+        #result { margin-top: 20px; background: #f4f4f4; padding: 15px; border-radius: 5px; display: none; }
+    </style>
+</head>
 <body>
-    <h1>Test SWA</h1>
-    <button onclick="testApi()">Chiama API</button>
-    <p id="output"></p>
+    <div class="card">
+        <h2>Device Dashboard</h2>
+        <label for="deviceList">Seleziona un dispositivo:</label>
+        <select id="deviceList">
+            <option>Caricamento dispositivi...</option>
+        </select>
+        <button onclick="getStats()">Ottieni Statistiche</button>
+
+        <div id="result"></div>
+    </div>
 
     <script>
-        async function testApi() {
-            const res = await fetch('/api/GetDevices');
-            const data = await res.json();
-            document.getElementById('output').innerText = data.message;
+        // Carica i device al caricamento della pagina
+        async function loadDevices() {
+            try {
+                const res = await fetch('/api/GetDevices');
+                const devices = await res.json();
+                const select = document.getElementById('deviceList');
+                select.innerHTML = devices.map(id => `<option value="${id}">${id}</option>`).join('');
+            } catch (err) {
+                console.error("Errore caricamento device:", err);
+            }
         }
+
+        async function getStats() {
+            const deviceId = document.getElementById('deviceList').value;
+            const resDiv = document.getElementById('result');
+            resDiv.style.display = 'block';
+            resDiv.innerHTML = "Calcolo in corso...";
+
+            try {
+                const res = await fetch(`/api/GetDeviceStats?deviceId=${deviceId}`);
+                const data = await res.json();
+
+                resDiv.innerHTML = `
+                    <h3>Statistiche per ${deviceId}</h3>
+                    <p><strong>Media Temp:</strong> ${data.avgTemp.toFixed(2)}°C</p>
+                    <p><strong>Media Umidità:</strong> ${data.avgHum.toFixed(2)}%</p>
+                    <p><strong>Primo segnale:</strong> <br><small>${data.minTS}</small></p>
+                    <p><strong>Ultimo segnale:</strong> <br><small>${data.maxTS}</small></p>
+                `;
+            } catch (err) {
+                resDiv.innerHTML = "Errore nel recupero dati.";
+            }
+        }
+
+        loadDevices();
     </script>
 </body>
 </html>

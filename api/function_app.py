@@ -32,26 +32,49 @@ def get_device_stats(req: func.HttpRequest) -> func.HttpResponse:
     try:
         device_id = req.params.get('deviceId')
         if not device_id:
-            return func.HttpResponse("Manca parametro deviceId", status_code=400)
+            return func.HttpResponse("Parametro deviceId mancante", status_code=400)
 
         container = get_container()
+
+        query = """
+        SELECT 
+            AVG(c.temperature) as avgTemp, 
+            AVG(c.humidity) as avgHum, 
+            COUNT(1) as cnt 
+        FROM c 
+        WHERE c.deviceId = @devId
+        """
+        params = [{"name": "@devId", "value": device_id}]
         
-        query = "SELECT AVG(c.temperature) as avgTemp, AVG(c.humidity) as avgHum, COUNT(1) as cnt FROM c WHERE c.deviceId = @devId"
-        parameters = [{"name": "@devId", "value": device_id}]
-        
-        items = list(container.query_items(query=query, parameters=parameters, enable_cross_partition_query=True))
-        
-        if not items or items[0]['cnt'] == 0:
-            return func.HttpResponse(json.dumps({"error": "Nessun dato"}), status_code=404)
-        
-        res = items[0]
+        items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+
+        if not items or items[0].get('cnt') == 0:
+            return func.HttpResponse(
+                json.dumps({"error": "Nessun dato trovato per questo ID", "id_cercato": device_id}), 
+                status_code=404, 
+                mimetype="application/json"
+            )
+
+        stats = items[0]
+        temp = stats.get('avgTemp')
+        hum = stats.get('avgHum')
+
+        response_data = {
+            "deviceId": device_id,
+            "avgTemp": round(float(temp), 2) if temp is not None else 0,
+            "avgHum": round(float(hum), 2) if hum is not None else 0,
+            "count": stats.get('cnt')
+        }
+
         return func.HttpResponse(
-            json.dumps({
-                "deviceId": device_id,
-                "avgTemp": round(res.get('avgTemp', 0), 2),
-                "avgHum": round(res.get('avgHum', 0), 2)
-            }),
+            json.dumps(response_data),
+            mimetype="application/json",
+            status_code=200
+        )
+
+    except Exception as e:
+        return func.HttpResponse(
+            json.dumps({"Dettaglio_Errore_Python": str(e)}), 
+            status_code=500, 
             mimetype="application/json"
         )
-    except Exception as e:
-        return func.HttpResponse(json.dumps({"DEBUG_ERROR": str(e)}), status_code=500)

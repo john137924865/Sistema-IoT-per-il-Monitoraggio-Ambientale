@@ -85,6 +85,8 @@
         canvas {
             max-width: 100%;
             margin-top: 15px;
+            /* Altezza fissa per evitare saltelli della pagina durante il caricamento */
+            min-height: 300px;
         }
     </style>
 </head>
@@ -106,7 +108,7 @@
         <div id="result"></div>
 
         <div id="chartContainer">
-            <label for="viewMode">Visualizza sul grafico:</label>
+            <label for="viewMode">Dato visualizzato:</label>
             <select id="viewMode" onchange="updateChart()">
                 <option value="temperature">Temperatura (°C)</option>
                 <option value="humidity">Umidità (%)</option>
@@ -119,6 +121,7 @@
         let myChart = null;
         let rawHistoryData = []; 
 
+        // 1. Caricamento iniziale della lista dispositivi
         async function loadDevices() {
             const select = document.getElementById('deviceList');
             const btns = [document.getElementById('btnStats'), document.getElementById('btnChart')];
@@ -129,7 +132,7 @@
                 const devices = await res.json();
                 
                 if (!devices || devices.length === 0) {
-                    select.innerHTML = '<option value="">Nessun device trovato</option>';
+                    select.innerHTML = '<option value="">Nessun dispositivo trovato</option>';
                     return;
                 }
 
@@ -140,6 +143,7 @@
             }
         }
 
+        // 2. Recupero statistiche aggregate
         async function getStats() {
             const deviceId = document.getElementById('deviceList').value;
             const resDiv = document.getElementById('result');
@@ -160,14 +164,15 @@
                     <div class="stat-row"><strong>Media Temperatura:</strong> <span>${temp}°C</span></div>
                     <div class="stat-row"><strong>Media Umidità:</strong> <span>${hum}%</span></div>
                     <div class="stat-row"><strong>Messaggi Totali:</strong> <span class="count-badge">${data.count || 0}</span></div>
-                    <p class="timestamp"><strong>Primo messaggio:</strong><br>${data.minTS || 'N/A'}</p>
-                    <p class="timestamp"><strong>Ultimo messaggio:</strong><br>${data.maxTS || 'N/A'}</p>
+                    <p class="timestamp"><strong>Primo segnale:</strong><br>${data.minTS || 'N/A'}</p>
+                    <p class="timestamp"><strong>Ultimo segnale:</strong><br>${data.maxTS || 'N/A'}</p>
                 `;
             } catch (err) {
-                resDiv.innerHTML = "<p style='color:red'>Errore API Statistiche</p>";
+                resDiv.innerHTML = "<p style='color:red'>Errore nel recupero delle statistiche.</p>";
             }
         }
 
+        // 3. Recupero dati per il grafico storico
         async function getChartData() {
             const deviceId = document.getElementById('deviceList').value;
             const chartCont = document.getElementById('chartContainer');
@@ -178,24 +183,33 @@
             try {
                 const res = await fetch(`/api/GetDeviceHistory?deviceId=${deviceId}`);
                 rawHistoryData = await res.json();
+                
+                // Disegna il grafico
                 updateChart();
-                chartCont.scrollIntoView({ behavior: 'smooth' });
+                
             } catch (err) {
-                alert("Errore nel recupero della cronologia");
+                alert("Errore nel recupero della cronologia dati.");
             }
         }
 
+        // 4. Rendering del grafico (Linee dritte e senza scatti di pagina)
         function updateChart() {
             const ctx = document.getElementById('iotChart').getContext('2d');
             const mode = document.getElementById('viewMode').value;
             
+            if (!rawHistoryData || rawHistoryData.length === 0) return;
+
+            // Formattazione dati per Chart.js
             const labels = rawHistoryData.map(d => new Date(d.timestamp).toLocaleString());
             const dataValues = rawHistoryData.map(d => d[mode]);
             
             const labelName = mode === 'temperature' ? 'Temperatura (°C)' : 'Umidità (%)';
             const color = mode === 'temperature' ? '#ff6384' : '#36a2eb';
 
-            if (myChart) myChart.destroy(); 
+            // Distruzione vecchio grafico per evitare bug visivi
+            if (myChart) {
+                myChart.destroy();
+            }
 
             myChart = new Chart(ctx, {
                 type: 'line',
@@ -207,25 +221,27 @@
                         borderColor: color,
                         backgroundColor: color + '33',
                         fill: true,
-                        tension: 0
+                        tension: 0 // Linee dritte punto-punto
                     }]
                 },
                 options: {
                     responsive: true,
+                    animation: false, // Disabilita animazione per evitare salti di pagina al cambio dato
                     elements: {
-                        point: {
-                            radius: 3
-                        }
+                        point: { radius: 3 }
                     },
-                    plugins: { legend: { position: 'top' } },
+                    plugins: { 
+                        legend: { position: 'top' } 
+                    },
                     scales: {
-                        x: { display: false }, 
+                        x: { display: false }, // Nasconde X per leggibilità (molti dati)
                         y: { beginAtZero: false }
                     }
                 }
             });
         }
 
+        // Avvio
         loadDevices();
     </script>
 </body>

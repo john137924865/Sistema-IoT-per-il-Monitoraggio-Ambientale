@@ -8,50 +8,32 @@
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            padding: 20px; 
-            line-height: 1.6; 
-            background-color: #f0f2f5;
+            padding: 20px; line-height: 1.6; background-color: #f0f2f5;
         }
         .card { 
-            background: white;
-            padding: 25px; 
-            border-radius: 12px; 
-            max-width: 600px; 
-            margin: auto;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background: white; padding: 25px; border-radius: 12px; 
+            max-width: 600px; margin: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         h2 { color: #1a73e8; margin-top: 0; }
         label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
         select, button { 
-            padding: 12px; 
-            margin: 10px 0; 
-            width: 100%; 
-            border-radius: 8px; 
-            border: 1px solid #ccc;
-            font-size: 16px;
+            padding: 12px; margin: 10px 0; width: 100%; 
+            border-radius: 8px; border: 1px solid #ccc; font-size: 16px;
         }
         .btn-group { display: flex; gap: 10px; }
         button { 
-            background-color: #1a73e8; 
-            color: white; 
-            border: none; 
-            cursor: pointer;
-            transition: background 0.3s;
-            flex: 1;
+            background-color: #1a73e8; color: white; border: none; 
+            cursor: pointer; transition: background 0.3s; flex: 1;
         }
         button:hover:not(:disabled) { background-color: #1557b0; }
         button:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.6; }
         #result, #chartContainer { 
-            margin-top: 20px; 
-            background: #f8f9fa; 
-            padding: 15px; 
-            border-radius: 8px; 
-            display: none; 
-            border-left: 5px solid #1a73e8;
+            margin-top: 20px; background: #f8f9fa; padding: 15px; 
+            border-radius: 8px; display: none; border-left: 5px solid #1a73e8;
         }
         .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
         .count-badge { background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
-        canvas { max-width: 100%; margin-top: 15px; min-height: 300px; }
+        canvas { max-width: 100%; margin-top: 15px; min-height: 320px; }
     </style>
 </head>
 <body>
@@ -59,18 +41,18 @@
     <div class="card">
         <h2>Device Dashboard</h2>
         
-        <label for="deviceList">Seleziona un dispositivo:</label>
-        <select id="deviceList"><option value="">Caricamento dispositivi...</option></select>
+        <label for="deviceList">Dispositivo:</label>
+        <select id="deviceList"><option value="">Caricamento...</option></select>
         
         <div class="btn-group">
-            <button id="btnStats" onclick="getStats()" disabled>Ottieni Statistiche</button>
-            <button id="btnChart" onclick="getChartData()" disabled>Visualizza Grafico</button>
+            <button id="btnStats" onclick="getStats()" disabled>Statistiche</button>
+            <button id="btnChart" onclick="getChartData()" disabled>Grafico</button>
         </div>
 
         <div id="result"></div>
 
         <div id="chartContainer">
-            <label for="viewMode">Dato visualizzato:</label>
+            <label for="viewMode">Mostra sul grafico:</label>
             <select id="viewMode" onchange="updateChart()">
                 <option value="temperature">Temperatura (°C)</option>
                 <option value="humidity">Umidità (%)</option>
@@ -85,34 +67,31 @@
 
         async function loadDevices() {
             const select = document.getElementById('deviceList');
-            const btns = [document.getElementById('btnStats'), document.getElementById('btnChart')];
             try {
                 const res = await fetch('/api/GetDevices');
                 const devices = await res.json();
-                if (!devices || devices.length === 0) {
-                    select.innerHTML = '<option value="">Nessun dispositivo trovato</option>';
-                    return;
-                }
+                if (!devices.length) { select.innerHTML = '<option>Nessun device</option>'; return; }
                 select.innerHTML = devices.map(id => `<option value="${id}">${id}</option>`).join('');
-                btns.forEach(b => b.disabled = false); 
-            } catch (err) { select.innerHTML = '<option value="">Errore nel caricamento</option>'; }
+                document.getElementById('btnStats').disabled = false;
+                document.getElementById('btnChart').disabled = false;
+            } catch (err) { select.innerHTML = '<option>Errore</option>'; }
         }
 
         async function getStats() {
             const deviceId = document.getElementById('deviceList').value;
             const resDiv = document.getElementById('result');
             resDiv.style.display = 'block';
-            resDiv.innerHTML = "<em>Recupero statistiche...</em>";
+            resDiv.innerHTML = "<em>Caricamento...</em>";
             try {
                 const res = await fetch(`/api/GetDeviceStats?deviceId=${deviceId}`);
                 const data = await res.json();
                 resDiv.innerHTML = `
-                    <h3>Statistiche per ${deviceId}</h3>
-                    <div class="stat-row"><strong>Media Temperatura:</strong> <span>${data.avgTemp.toFixed(2)}°C</span></div>
-                    <div class="stat-row"><strong>Media Umidità:</strong> <span>${data.avgHum.toFixed(2)}%</span></div>
-                    <div class="stat-row"><strong>Messaggi Totali:</strong> <span class="count-badge">${data.count || 0}</span></div>
+                    <h3>${deviceId}</h3>
+                    <div class="stat-row"><strong>Media Temp:</strong> <span>${data.avgTemp.toFixed(2)}°C</span></div>
+                    <div class="stat-row"><strong>Media Umid:</strong> <span>${data.avgHum.toFixed(2)}%</span></div>
+                    <div class="stat-row"><strong>Messaggi:</strong> <span class="count-badge">${data.count}</span></div>
                 `;
-            } catch (err) { resDiv.innerHTML = "Errore recupero statistiche."; }
+            } catch (err) { resDiv.innerHTML = "Errore."; }
         }
 
         async function getChartData() {
@@ -122,7 +101,7 @@
                 const res = await fetch(`/api/GetDeviceHistory?deviceId=${deviceId}`);
                 rawHistoryData = await res.json();
                 updateChart();
-            } catch (err) { alert("Errore cronologia."); }
+            } catch (err) { alert("Errore dati."); }
         }
 
         function updateChart() {
@@ -131,38 +110,57 @@
             if (!rawHistoryData.length) return;
 
             const labels = rawHistoryData.map(d => new Date(d.timestamp).toLocaleString());
-            const dataValues = rawHistoryData.map(d => d[mode]);
-            const color = mode === 'temperature' ? '#ff6384' : '#36a2eb';
-
+            
             if (myChart) myChart.destroy();
 
             myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: mode.charAt(0).toUpperCase() + mode.slice(1),
-                        data: dataValues,
-                        borderColor: color,
-                        backgroundColor: color + '33',
-                        fill: true,
-                        tension: 0,
-                        pointRadius: 5,        // Punti più grandi e visibili
-                        pointHitRadius: 20,    // Area di attivazione del popup molto più grande
-                        pointHoverRadius: 8    // Effetto ingrandimento al passaggio
-                    }]
+                    datasets: [
+                        {
+                            label: 'Temperatura (°C)',
+                            data: rawHistoryData.map(d => d.temperature),
+                            borderColor: '#ff6384',
+                            backgroundColor: '#ff638433',
+                            tension: 0,
+                            fill: mode === 'temperature',
+                            hidden: false, // Sarà gestito via CSS/Opacity per il popup
+                            showLine: mode === 'temperature', // Mostra la linea solo se selezionata
+                            pointRadius: mode === 'temperature' ? 5 : 0, // Punti invisibili se non selezionato
+                            pointHitRadius: 20
+                        },
+                        {
+                            label: 'Umidità (%)',
+                            data: rawHistoryData.map(d => d.humidity),
+                            borderColor: '#36a2eb',
+                            backgroundColor: '#36a2eb33',
+                            tension: 0,
+                            fill: mode === 'humidity',
+                            showLine: mode === 'humidity',
+                            pointRadius: mode === 'humidity' ? 5 : 0,
+                            pointHitRadius: 20
+                        }
+                    ]
                 },
                 options: {
                     responsive: true,
                     animation: false,
                     interaction: {
-                        mode: 'index',         // Attiva il popup basandosi sulla posizione X del mouse
-                        intersect: false,      // Non serve toccare il punto esatto
+                        mode: 'index',
+                        intersect: false,
                     },
                     plugins: {
                         tooltip: {
-                            enabled: true,
-                            position: 'nearest'
+                            callbacks: {
+                                // Questo assicura che nel popup appaiano sempre entrambi
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    if (context.parsed.y !== null) label += context.parsed.y.toFixed(1);
+                                    return label;
+                                }
+                            }
                         }
                     },
                     scales: {

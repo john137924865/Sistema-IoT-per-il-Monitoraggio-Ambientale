@@ -69,7 +69,8 @@ def get_device_stats(req: func.HttpRequest) -> func.HttpResponse:
             "avgTemp": float(res.get('avgTemp') or 0),
             "avgHum": float(res.get('avgHum') or 0),
             "minTS": str(res.get('minTS') or "N/A"),
-            "maxTS": str(res.get('maxTS') or "N/A")
+            "maxTS": str(res.get('maxTS') or "N/A"),
+            "count": int(res.get('cnt') or 0)
         }
         
         return func.HttpResponse(json.dumps(result), mimetype="application/json")
@@ -77,3 +78,21 @@ def get_device_stats(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as e:
         return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500)
     
+
+@app.route(route="GetDeviceHistory", methods=["GET"])
+def get_device_history(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        device_id = req.params.get('deviceId')
+        if not device_id:
+            return func.HttpResponse("Manca deviceId", status_code=400)
+
+        container = get_container()
+
+        query = "SELECT c.timestamp, c.temperature, c.humidity FROM c WHERE c.deviceId = @devId ORDER BY c.timestamp ASC"
+        params = [{"name": "@devId", "value": device_id}]
+        
+        items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+        
+        return func.HttpResponse(json.dumps(items), mimetype="application/json")
+    except Exception as e:
+        return func.HttpResponse(json.dumps({"error": str(e)}), status_code=500)

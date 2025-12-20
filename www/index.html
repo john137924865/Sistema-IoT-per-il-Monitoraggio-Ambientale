@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Monitoraggio IoT Cosmos DB</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -16,12 +17,13 @@
             border: none; 
             padding: 25px; 
             border-radius: 12px; 
-            max-width: 450px; 
+            max-width: 600px; 
             margin: auto;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
         h2 { color: #1a73e8; margin-top: 0; }
-        label { font-weight: bold; display: block; margin-bottom: 5px; }
+        label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
+        
         select, button { 
             padding: 12px; 
             margin: 10px 0; 
@@ -30,15 +32,30 @@
             border: 1px solid #ccc;
             font-size: 16px;
         }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
         button { 
             background-color: #1a73e8; 
             color: white; 
             border: none; 
             cursor: pointer;
-            transition: background 0.3s;
+            transition: background 0.3s, opacity 0.3s;
+            flex: 1;
         }
-        button:hover { background-color: #1557b0; }
-        #result { 
+
+        button:hover:not(:disabled) { background-color: #1557b0; }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        #result, #chartContainer { 
             margin-top: 20px; 
             background: #f8f9fa; 
             padding: 15px; 
@@ -46,8 +63,29 @@
             display: none; 
             border-left: 5px solid #1a73e8;
         }
-        .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
-        .timestamp { font-size: 0.85em; color: #666; }
+
+        .stat-row { 
+            display: flex; 
+            justify-content: space-between; 
+            margin-bottom: 10px; 
+            border-bottom: 1px solid #eee; 
+            padding-bottom: 5px; 
+        }
+
+        .timestamp { font-size: 0.85em; color: #666; margin-top: 10px; }
+        
+        .count-badge { 
+            background: #e8f0fe; 
+            color: #1a73e8; 
+            padding: 2px 8px; 
+            border-radius: 12px; 
+            font-weight: bold; 
+        }
+
+        canvas {
+            max-width: 100%;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -60,77 +98,135 @@
             <option value="">Caricamento dispositivi...</option>
         </select>
         
-        <button onclick="getStats()">Ottieni Statistiche</button>
+        <div class="btn-group">
+            <button id="btnStats" onclick="getStats()" disabled>Ottieni Statistiche</button>
+            <button id="btnChart" onclick="getChartData()" disabled>Visualizza Grafico</button>
+        </div>
 
         <div id="result"></div>
+
+        <div id="chartContainer">
+            <label for="viewMode">Visualizza sul grafico:</label>
+            <select id="viewMode" onchange="updateChart()">
+                <option value="temperature">Temperatura (°C)</option>
+                <option value="humidity">Umidità (%)</option>
+            </select>
+            <canvas id="iotChart"></canvas>
+        </div>
     </div>
 
     <script>
-        // Carica la lista dei device univoci all'avvio
+        let myChart = null;
+        let rawHistoryData = []; // Buffer per i dati storici
+
+        // 1. Carica i device univoci
         async function loadDevices() {
+            const select = document.getElementById('deviceList');
+            const btns = [document.getElementById('btnStats'), document.getElementById('btnChart')];
+
             try {
                 const res = await fetch('/api/GetDevices');
-                if (!res.ok) throw new Error("Errore API");
-                
+                if (!res.ok) throw new Error();
                 const devices = await res.json();
-                const select = document.getElementById('deviceList');
                 
-                if (devices.length === 0) {
-                    select.innerHTML = '<option>Nessun device trovato</option>';
+                if (!devices || devices.length === 0) {
+                    select.innerHTML = '<option value="">Nessun device trovato</option>';
                     return;
                 }
 
-                select.innerHTML = devices.map(id => 
-                    `<option value="${id}">${id}</option>`
-                ).join('');
+                select.innerHTML = devices.map(id => `<option value="${id}">${id}</option>`).join('');
+                btns.forEach(b => b.disabled = false); // Abilita i pulsanti
             } catch (err) {
-                console.error("Errore caricamento device:", err);
-                document.getElementById('deviceList').innerHTML = '<option>Errore nel caricamento</option>';
+                select.innerHTML = '<option value="">Errore nel caricamento</option>';
             }
         }
 
-        // Recupera le medie e i timestamp dal backend Python
+        // 2. Recupera medie e riepilogo
         async function getStats() {
             const deviceId = document.getElementById('deviceList').value;
             const resDiv = document.getElementById('result');
-            
             if (!deviceId) return;
 
             resDiv.style.display = 'block';
-            resDiv.innerHTML = "<em>Recupero dati in corso...</em>";
+            resDiv.innerHTML = "<em>Recupero statistiche...</em>";
 
             try {
                 const res = await fetch(`/api/GetDeviceStats?deviceId=${deviceId}`);
                 const data = await res.json();
 
-                if (data.error || data.error_python) {
-                    resDiv.innerHTML = `<p style="color:red">Errore: ${data.error || data.error_python}</p>`;
-                    return;
-                }
-
-                // Verifichiamo che i dati siano numeri prima di usare toFixed
                 const temp = typeof data.avgTemp === 'number' ? data.avgTemp.toFixed(2) : "N/D";
                 const hum = typeof data.avgHum === 'number' ? data.avgHum.toFixed(2) : "N/D";
 
                 resDiv.innerHTML = `
                     <h3>Statistiche per ${deviceId}</h3>
-                    <div class="stat-row">
-                        <span><strong>Media Temp:</strong></span>
-                        <span>${temp}°C</span>
-                    </div>
-                    <div class="stat-row">
-                        <span><strong>Media Umidità:</strong></span>
-                        <span>${hum}%</span>
-                    </div>
-                    <p class="timestamp"><strong>Primo segnale:</strong><br>${data.minTS || 'N/A'}</p>
-                    <p class="timestamp"><strong>Ultimo segnale:</strong><br>${data.maxTS || 'N/A'}</p>
+                    <div class="stat-row"><strong>Media Temperatura:</strong> <span>${temp}°C</span></div>
+                    <div class="stat-row"><strong>Media Umidità:</strong> <span>${hum}%</span></div>
+                    <div class="stat-row"><strong>Messaggi Totali:</strong> <span class="count-badge">${data.count || 0}</span></div>
+                    <p class="timestamp"><strong>Primo messaggio:</strong><br>${data.minTS || 'N/A'}</p>
+                    <p class="timestamp"><strong>Ultimo messaggio:</strong><br>${data.maxTS || 'N/A'}</p>
                 `;
             } catch (err) {
-                resDiv.innerHTML = `<p style="color:red">Errore di comunicazione con l'API.</p>`;
+                resDiv.innerHTML = "<p style='color:red'>Errore API Statistiche</p>";
             }
         }
 
-        // Avvio automatico
+        // 3. Recupera dati storici per il grafico
+        async function getChartData() {
+            const deviceId = document.getElementById('deviceList').value;
+            const chartCont = document.getElementById('chartContainer');
+            if (!deviceId) return;
+
+            chartCont.style.display = 'block';
+            
+            try {
+                const res = await fetch(`/api/GetDeviceHistory?deviceId=${deviceId}`);
+                rawHistoryData = await res.json();
+                updateChart();
+                chartCont.scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                alert("Errore nel recupero della cronologia");
+            }
+        }
+
+        // 4. Disegna/Aggiorna il grafico (Chart.js)
+        function updateChart() {
+            const ctx = document.getElementById('iotChart').getContext('2d');
+            const mode = document.getElementById('viewMode').value;
+            
+            // Prepariamo etichette (X) e valori (Y)
+            const labels = rawHistoryData.map(d => new Date(d.timestamp).toLocaleString());
+            const dataValues = rawHistoryData.map(d => d[mode]);
+            
+            const labelName = mode === 'temperature' ? 'Temperatura (°C)' : 'Umidità (%)';
+            const color = mode === 'temperature' ? '#ff6384' : '#36a2eb';
+
+            if (myChart) myChart.destroy(); // Distruggi il vecchio grafico se esiste
+
+            myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: labelName,
+                        data: dataValues,
+                        borderColor: color,
+                        backgroundColor: color + '33', // Colore trasparente per l'area
+                        fill: true,
+                        tension: 0.3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: 'top' } },
+                    scales: {
+                        x: { display: false }, // Nascondiamo le etichette X se sono troppe
+                        y: { beginAtZero: false }
+                    }
+                }
+            });
+        }
+
+        // Inizializzazione
         loadDevices();
     </script>
 </body>

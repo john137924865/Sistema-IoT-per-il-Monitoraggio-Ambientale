@@ -14,7 +14,6 @@
         }
         .card { 
             background: white;
-            border: none; 
             padding: 25px; 
             border-radius: 12px; 
             max-width: 600px; 
@@ -23,7 +22,6 @@
         }
         h2 { color: #1a73e8; margin-top: 0; }
         label { font-weight: bold; display: block; margin-top: 15px; margin-bottom: 5px; }
-        
         select, button { 
             padding: 12px; 
             margin: 10px 0; 
@@ -32,29 +30,17 @@
             border: 1px solid #ccc;
             font-size: 16px;
         }
-
-        .btn-group {
-            display: flex;
-            gap: 10px;
-        }
-
+        .btn-group { display: flex; gap: 10px; }
         button { 
             background-color: #1a73e8; 
             color: white; 
             border: none; 
             cursor: pointer;
-            transition: background 0.3s, opacity 0.3s;
+            transition: background 0.3s;
             flex: 1;
         }
-
         button:hover:not(:disabled) { background-color: #1557b0; }
-        
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-
+        button:disabled { background-color: #ccc; cursor: not-allowed; opacity: 0.6; }
         #result, #chartContainer { 
             margin-top: 20px; 
             background: #f8f9fa; 
@@ -63,31 +49,9 @@
             display: none; 
             border-left: 5px solid #1a73e8;
         }
-
-        .stat-row { 
-            display: flex; 
-            justify-content: space-between; 
-            margin-bottom: 10px; 
-            border-bottom: 1px solid #eee; 
-            padding-bottom: 5px; 
-        }
-
-        .timestamp { font-size: 0.85em; color: #666; margin-top: 10px; }
-        
-        .count-badge { 
-            background: #e8f0fe; 
-            color: #1a73e8; 
-            padding: 2px 8px; 
-            border-radius: 12px; 
-            font-weight: bold; 
-        }
-
-        canvas {
-            max-width: 100%;
-            margin-top: 15px;
-            /* Altezza fissa per evitare saltelli della pagina durante il caricamento */
-            min-height: 300px;
-        }
+        .stat-row { display: flex; justify-content: space-between; margin-bottom: 10px; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .count-badge { background: #e8f0fe; color: #1a73e8; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
+        canvas { max-width: 100%; margin-top: 15px; min-height: 300px; }
     </style>
 </head>
 <body>
@@ -96,9 +60,7 @@
         <h2>Device Dashboard</h2>
         
         <label for="deviceList">Seleziona un dispositivo:</label>
-        <select id="deviceList">
-            <option value="">Caricamento dispositivi...</option>
-        </select>
+        <select id="deviceList"><option value="">Caricamento dispositivi...</option></select>
         
         <div class="btn-group">
             <button id="btnStats" onclick="getStats()" disabled>Ottieni Statistiche</button>
@@ -121,127 +83,96 @@
         let myChart = null;
         let rawHistoryData = []; 
 
-        // 1. Caricamento iniziale della lista dispositivi
         async function loadDevices() {
             const select = document.getElementById('deviceList');
             const btns = [document.getElementById('btnStats'), document.getElementById('btnChart')];
-
             try {
                 const res = await fetch('/api/GetDevices');
-                if (!res.ok) throw new Error();
                 const devices = await res.json();
-                
                 if (!devices || devices.length === 0) {
                     select.innerHTML = '<option value="">Nessun dispositivo trovato</option>';
                     return;
                 }
-
                 select.innerHTML = devices.map(id => `<option value="${id}">${id}</option>`).join('');
                 btns.forEach(b => b.disabled = false); 
-            } catch (err) {
-                select.innerHTML = '<option value="">Errore nel caricamento</option>';
-            }
+            } catch (err) { select.innerHTML = '<option value="">Errore nel caricamento</option>'; }
         }
 
-        // 2. Recupero statistiche aggregate
         async function getStats() {
             const deviceId = document.getElementById('deviceList').value;
             const resDiv = document.getElementById('result');
-            if (!deviceId) return;
-
             resDiv.style.display = 'block';
             resDiv.innerHTML = "<em>Recupero statistiche...</em>";
-
             try {
                 const res = await fetch(`/api/GetDeviceStats?deviceId=${deviceId}`);
                 const data = await res.json();
-
-                const temp = typeof data.avgTemp === 'number' ? data.avgTemp.toFixed(2) : "N/D";
-                const hum = typeof data.avgHum === 'number' ? data.avgHum.toFixed(2) : "N/D";
-
                 resDiv.innerHTML = `
                     <h3>Statistiche per ${deviceId}</h3>
-                    <div class="stat-row"><strong>Media Temperatura:</strong> <span>${temp}°C</span></div>
-                    <div class="stat-row"><strong>Media Umidità:</strong> <span>${hum}%</span></div>
+                    <div class="stat-row"><strong>Media Temperatura:</strong> <span>${data.avgTemp.toFixed(2)}°C</span></div>
+                    <div class="stat-row"><strong>Media Umidità:</strong> <span>${data.avgHum.toFixed(2)}%</span></div>
                     <div class="stat-row"><strong>Messaggi Totali:</strong> <span class="count-badge">${data.count || 0}</span></div>
-                    <p class="timestamp"><strong>Primo segnale:</strong><br>${data.minTS || 'N/A'}</p>
-                    <p class="timestamp"><strong>Ultimo segnale:</strong><br>${data.maxTS || 'N/A'}</p>
                 `;
-            } catch (err) {
-                resDiv.innerHTML = "<p style='color:red'>Errore nel recupero delle statistiche.</p>";
-            }
+            } catch (err) { resDiv.innerHTML = "Errore recupero statistiche."; }
         }
 
-        // 3. Recupero dati per il grafico storico
         async function getChartData() {
             const deviceId = document.getElementById('deviceList').value;
-            const chartCont = document.getElementById('chartContainer');
-            if (!deviceId) return;
-
-            chartCont.style.display = 'block';
-            
+            document.getElementById('chartContainer').style.display = 'block';
             try {
                 const res = await fetch(`/api/GetDeviceHistory?deviceId=${deviceId}`);
                 rawHistoryData = await res.json();
-                
-                // Disegna il grafico
                 updateChart();
-                
-            } catch (err) {
-                alert("Errore nel recupero della cronologia dati.");
-            }
+            } catch (err) { alert("Errore cronologia."); }
         }
 
-        // 4. Rendering del grafico (Linee dritte e senza scatti di pagina)
         function updateChart() {
             const ctx = document.getElementById('iotChart').getContext('2d');
             const mode = document.getElementById('viewMode').value;
-            
-            if (!rawHistoryData || rawHistoryData.length === 0) return;
+            if (!rawHistoryData.length) return;
 
-            // Formattazione dati per Chart.js
             const labels = rawHistoryData.map(d => new Date(d.timestamp).toLocaleString());
             const dataValues = rawHistoryData.map(d => d[mode]);
-            
-            const labelName = mode === 'temperature' ? 'Temperatura (°C)' : 'Umidità (%)';
             const color = mode === 'temperature' ? '#ff6384' : '#36a2eb';
 
-            // Distruzione vecchio grafico per evitare bug visivi
-            if (myChart) {
-                myChart.destroy();
-            }
+            if (myChart) myChart.destroy();
 
             myChart = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: labelName,
+                        label: mode.charAt(0).toUpperCase() + mode.slice(1),
                         data: dataValues,
                         borderColor: color,
                         backgroundColor: color + '33',
                         fill: true,
-                        tension: 0 // Linee dritte punto-punto
+                        tension: 0,
+                        pointRadius: 5,        // Punti più grandi e visibili
+                        pointHitRadius: 20,    // Area di attivazione del popup molto più grande
+                        pointHoverRadius: 8    // Effetto ingrandimento al passaggio
                     }]
                 },
                 options: {
                     responsive: true,
-                    animation: false, // Disabilita animazione per evitare salti di pagina al cambio dato
-                    elements: {
-                        point: { radius: 3 }
+                    animation: false,
+                    interaction: {
+                        mode: 'index',         // Attiva il popup basandosi sulla posizione X del mouse
+                        intersect: false,      // Non serve toccare il punto esatto
                     },
-                    plugins: { 
-                        legend: { position: 'top' } 
+                    plugins: {
+                        tooltip: {
+                            enabled: true,
+                            position: 'nearest'
+                        }
                     },
                     scales: {
-                        x: { display: false }, // Nasconde X per leggibilità (molti dati)
+                        x: { display: false },
                         y: { beginAtZero: false }
                     }
                 }
             });
         }
 
-        // Avvio
         loadDevices();
     </script>
 </body>

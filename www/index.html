@@ -149,15 +149,25 @@
                     }
                 },
                 scales: { x: { display: false }, y: { beginAtZero: false } },
+                
+                // Gestione Hover per sincronizzare l'attivazione
                 onHover: (event, chartElement, chart) => {
                     syncCharts(chart, event);
                 },
-                // NUOVO: Nasconde il tooltip quando il mouse esce dal grafico
+                
+                // Gestione Leave per pulire entrambi i grafici
                 onLeave: (event, chartElement, chart) => {
                     const otherChart = (chart === chartTemp) ? chartHum : chartTemp;
+                    
+                    // Reset grafico attuale
+                    chart.setActiveElements([]);
+                    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+                    chart.update();
+
+                    // Reset altro grafico
                     if (otherChart) {
-                        otherChart.tooltip.setActiveElements([], { x: 0, y: 0 });
                         otherChart.setActiveElements([]);
+                        otherChart.tooltip.setActiveElements([], { x: 0, y: 0 });
                         otherChart.update();
                     }
                 }
@@ -192,12 +202,13 @@
             
             if (points.length > 0) {
                 const index = points[0].index;
-                otherChart.tooltip.setActiveElements([{ datasetIndex: 0, index: index }], { x: 0, y: 0 });
+                // Attiva punto e tooltip sull'altro grafico
                 otherChart.setActiveElements([{ datasetIndex: 0, index: index }]);
+                otherChart.tooltip.setActiveElements([{ datasetIndex: 0, index: index }], { x: 0, y: 0 });
             } else {
-                // Se non ci sono punti sotto il mouse nel grafico sorgente, pulisce l'altro
-                otherChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+                // Pulisce se il mouse non è sopra un punto
                 otherChart.setActiveElements([]);
+                otherChart.tooltip.setActiveElements([], { x: 0, y: 0 });
             }
             otherChart.update();
         }

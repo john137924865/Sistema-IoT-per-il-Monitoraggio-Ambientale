@@ -46,7 +46,6 @@ def get_device_stats(req: func.HttpRequest) -> func.HttpResponse:
                 COUNT(1) as cnt
             FROM c 
             WHERE c.deviceId = @devId
-            GROUP BY c.deviceId
         """
         
         params = [{"name": "@devId", "value": device_id}]

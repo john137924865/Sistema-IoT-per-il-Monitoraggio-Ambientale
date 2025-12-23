@@ -91,7 +91,11 @@ def get_device_history(req: func.HttpRequest) -> func.HttpResponse:
         query = "SELECT c.timestamp, c.temperature, c.humidity FROM c WHERE c.deviceId = @devId ORDER BY c.timestamp ASC"
         params = [{"name": "@devId", "value": device_id}]
         
-        items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+        items = list(container.query_items(
+            query=query, 
+            parameters=params, 
+            partition_key=device_id
+        ))
         
         return func.HttpResponse(json.dumps(items), mimetype="application/json")
     except Exception as e:
